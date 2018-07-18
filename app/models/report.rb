@@ -658,14 +658,38 @@ class Report
     SQL
 
     flag_count_query = <<~SQL
-    SELECT agreed_by_id AS user_id,
+    WITH agreed_flags AS (
+    SELECT pa.agreed_by_id AS user_id,
     COUNT(*) AS flag_count
-    FROM post_actions
-    WHERE (agreed_by_id = ANY(ARRAY#{mod_ids}) OR disagreed_by_id = ANY(ARRAY#{mod_ids}))
-    AND post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
-    AND created_at >= '#{report.start_date}'
-    AND created_at <= '#{report.end_date}'
+    FROM post_actions pa
+    JOIN users u
+    ON u.id = pa.agreed_by_id
+    WHERE u.moderator = 'true'
+    AND u.id > 0
+    AND pa.post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
+    AND pa.created_at >= '#{report.start_date}'
+    AND pa.created_at <= '#{report.end_date}'
     GROUP BY agreed_by_id
+    ),
+    disagreed_flags AS (
+    SELECT pa.disagreed_by_id AS user_id,
+    COUNT(*) AS flag_count
+    FROM post_actions pa
+    JOIN users u
+    ON u.id = pa.disagreed_by_id
+    WHERE u.moderator = 'true'
+    AND u.id > 0
+    AND pa.post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
+    AND pa.created_at >= '#{report.start_date}'
+    AND pa.created_at <= '#{report.end_date}'
+    GROUP BY disagreed_by_id
+    )
+    SELECT
+    COALESCE(af.user_id, df.user_id) AS user_id,
+    COALESCE(af.flag_count, 0) + COALESCE(df.flag_count, 0) AS flag_count
+    FROM agreed_flags af
+    FULL OUTER JOIN disagreed_flags df
+    ON df.user_id = af.user_id
     SQL
 
     topic_count_query = <<~SQL
@@ -740,7 +764,7 @@ class Report
     pa.disagreed_by_id,
     pa.deferred_by_id,
     pa.user_id AS flagger_id,
-    (select u.username FROM users u WHERE u.id = pa.user_id) AS flagger_username,
+    (SELECT u.username FROM users u WHERE u.id = pa.user_id) AS flagger_username,
     COALESCE(pa.disagreed_at, pa.agreed_at, pa.deferred_at, NULL) AS responded_at,
     COALESCE(pa.agreed_by_id, pa.disagreed_by_id, pa.deferred_by_id, NULL) AS staff_id,
     (SELECT u.username FROM users u WHERE u.id = COALESCE(pa.agreed_by_id, pa.disagreed_by_id, pa.deferred_by_id, null)) AS staff_username,
