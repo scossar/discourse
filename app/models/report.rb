@@ -632,7 +632,7 @@ class Report
     report.data = []
     mod_data = {}
 
-    User.real.where(moderator: true).pluck(:id, :username).find_each do |u|
+    User.real.where(moderator: true).pluck(:id, :username).each do |u|
       mod_data[u[0]] = {
         user_id: u[0],
         username: u[1],
@@ -645,13 +645,16 @@ class Report
     return if mod_ids.empty?
 
     time_read_query = <<~SQL
-    SELECT SUM(time_read) AS time_read,
-    user_id
-    FROM user_visits
-    WHERE user_id = ANY(ARRAY#{mod_ids})
-    AND visited_at >= '#{report.start_date}'
-    AND visited_at <= '#{report.end_date}'
-    GROUP BY user_id
+    SELECT SUM(uv.time_read) AS time_read,
+    uv.user_id
+    FROM user_visits uv
+    JOIN users u
+    ON u.id = uv.user_id
+    WHERE u.moderator = 'true'
+    AND u.id > 0
+    AND uv.visited_at >= '#{report.start_date}'
+    AND uv.visited_at <= '#{report.end_date}'
+    GROUP BY uv.user_id
     SQL
 
     flag_count_query = <<~SQL
@@ -666,39 +669,45 @@ class Report
     SQL
 
     topic_count_query = <<~SQL
-    SELECT user_id,
+    SELECT t.user_id,
     COUNT(*) AS topic_count
-    FROM topics
-    WHERE user_id = ANY(ARRAY#{mod_ids})
-    AND created_at >= '#{report.start_date}'
-    AND created_at <= '#{report.end_date}'
-    GROUP BY user_id
+    FROM topics t
+    JOIN users u
+    ON u.id = t.user_id
+    AND u.moderator = 'true'
+    AND u.id > 0
+    AND t.created_at >= '#{report.start_date}'
+    AND t.created_at <= '#{report.end_date}'
+    GROUP BY t.user_id
     SQL
 
     post_count_query = <<~SQL
-    SELECT user_id,
+    SELECT p.user_id,
     COUNT(*) AS post_count
-    FROM posts
-    WHERE user_id = ANY(ARRAY#{mod_ids})
-    AND created_at >= '#{report.start_date}'
-    AND created_at <= '#{report.end_date}'
+    FROM posts p
+    JOIN users u
+    ON u.id = p.user_id
+    WHERE u.moderator = 'true'
+    AND u.id > 0
+    AND p.created_at >= '#{report.start_date}'
+    AND p.created_at <= '#{report.end_date}'
     GROUP BY user_id
     SQL
 
     DB.query(time_read_query).each do |row|
-      mod_data[row.user_id][:time_read] = row.time_read if row.user_id
+      mod_data[row.user_id][:time_read] = row.time_read
     end
 
     DB.query(flag_count_query).each do |row|
-      mod_data[row.user_id][:flag_count] = row.flag_count if row.user_id
+      mod_data[row.user_id][:flag_count] = row.flag_count
     end
 
     DB.query(topic_count_query).each do |row|
-      mod_data[row.user_id][:topic_count] = row.topic_count if row.user_id
+      mod_data[row.user_id][:topic_count] = row.topic_count
     end
 
     DB.query(post_count_query).each do |row|
-      mod_data[row.user_id][:post_count] = row.post_count if row.user_id
+      mod_data[row.user_id][:post_count] = row.post_count
     end
 
     report.data = mod_data.values
