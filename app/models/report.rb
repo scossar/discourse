@@ -749,8 +749,39 @@ class Report
     flag_types = PostActionType.flag_types_without_custom
 
     sql = <<~SQL
-    SELECT pa.post_action_type_id,
+    WITH poster_data AS (
+    SELECT pa.id,
     p.user_id AS poster_id,
+    u.username AS poster_username
+    FROM post_actions pa
+    JOIN posts p
+    ON p.id = pa.post_id
+    JOIN users u
+    ON u.id = p.user_id
+    WHERE pa.post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
+    AND pa.created_at >= '#{report.start_date}'
+    AND pa.created_at <= '#{report.end_date}'
+    ),
+    flagger_data AS (
+    SELECT
+    pa.id,
+    u.id AS flagger_id,
+    u.username AS flagger_username
+    FROM post_actions pa
+    JOIN users u
+    ON u.id = pa.user_id
+    WHERE pa.post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
+    AND pa.created_at >= '#{report.start_date}'
+    AND pa.created_at <= '#{report.end_date}'
+    )
+
+    SELECT
+    u.username AS staff_username,
+    u.id AS staff_id,
+    pd.poster_username,
+    pd.poster_id,
+    fd.flagger_username,
+    fd.flagger_id,
     pa.post_action_type_id,
     pa.created_at,
     pa.agreed_at,
@@ -759,20 +790,17 @@ class Report
     pa.agreed_by_id,
     pa.disagreed_by_id,
     pa.deferred_by_id,
-    pa.user_id AS flagger_id,
-    (SELECT u.username FROM users u WHERE u.id = pa.user_id) AS flagger_username,
-    COALESCE(pa.disagreed_at, pa.agreed_at, pa.deferred_at, NULL) AS responded_at,
-    COALESCE(pa.agreed_by_id, pa.disagreed_by_id, pa.deferred_by_id, NULL) AS staff_id,
-    (SELECT u.username FROM users u WHERE u.id = COALESCE(pa.agreed_by_id, pa.disagreed_by_id, pa.deferred_by_id, null)) AS staff_username,
-    (SELECT u.username FROM users u WHERE u.id = p.user_id) as poster_username
+    COALESCE(pa.disagreed_at, pa.agreed_at, pa.deferred_at, NULL) AS responded_at
     FROM post_actions pa
-    JOIN posts p
-    ON p.id = pa.post_id
+    JOIN users u
+    ON u.id = COALESCE(pa.agreed_by_id, pa.disagreed_by_id, pa.deferred_by_id, null)
+    FULL OUTER JOIN flagger_data fd
+    ON fd.id = pa.id
+    FULL OUTER JOIN poster_data pd
+    ON pd.id = pa.id
     WHERE pa.post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
     AND pa.created_at >= '#{report.start_date}'
     AND pa.created_at <= '#{report.end_date}'
-    ORDER BY pa.created_at DESC
-    LIMIT 20
     SQL
 
     DB.query(sql).each do |row|
