@@ -662,7 +662,7 @@ class Report
     ON u.id = pa.agreed_by_id
     WHERE u.moderator = 'true'
     AND u.id > 0
-    AND pa.post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
+    AND pa.post_action_type_id IN (#{flag_types_list})
     AND pa.created_at >= '#{report.start_date}'
     AND pa.created_at <= '#{report.end_date}'
     GROUP BY agreed_by_id
@@ -675,7 +675,7 @@ class Report
     ON u.id = pa.disagreed_by_id
     WHERE u.moderator = 'true'
     AND u.id > 0
-    AND pa.post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
+    AND pa.post_action_type_id IN (#{flag_types_list})
     AND pa.created_at >= '#{report.start_date}'
     AND pa.created_at <= '#{report.end_date}'
     GROUP BY disagreed_by_id
@@ -758,7 +758,7 @@ class Report
     ON p.id = pa.post_id
     JOIN users u
     ON u.id = p.user_id
-    WHERE pa.post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
+    WHERE pa.post_action_type_id IN (#{flag_types_list})
     AND pa.created_at >= '#{report.start_date}'
     AND pa.created_at <= '#{report.end_date}'
     ),
@@ -770,14 +770,26 @@ class Report
     FROM post_actions pa
     JOIN users u
     ON u.id = pa.user_id
-    WHERE pa.post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
+    WHERE pa.post_action_type_id IN (#{flag_types_list})
+    AND pa.created_at >= '#{report.start_date}'
+    AND pa.created_at <= '#{report.end_date}'
+    ),
+    staff_data AS (
+    SELECT
+    pa.id,
+    u.id AS staff_id,
+    u.username AS staff_username
+    FROM post_actions pa
+    JOIN users u
+    ON u.id = COALESCE(pa.agreed_by_id, pa.disagreed_by_id, pa.deferred_by_id)
+    WHERE pa.post_action_type_id IN (#{flag_types_list})
     AND pa.created_at >= '#{report.start_date}'
     AND pa.created_at <= '#{report.end_date}'
     )
 
     SELECT
-    u.username AS staff_username,
-    u.id AS staff_id,
+    sd.staff_username,
+    sd.staff_id,
     pd.poster_username,
     pd.poster_id,
     fd.flagger_username,
@@ -790,15 +802,15 @@ class Report
     pa.agreed_by_id,
     pa.disagreed_by_id,
     pa.deferred_by_id,
-    COALESCE(pa.disagreed_at, pa.agreed_at, pa.deferred_at, NULL) AS responded_at
+    COALESCE(pa.disagreed_at, pa.agreed_at, pa.deferred_at) AS responded_at
     FROM post_actions pa
-    JOIN users u
-    ON u.id = COALESCE(pa.agreed_by_id, pa.disagreed_by_id, pa.deferred_by_id, null)
+    FULL OUTER JOIN staff_data sd
+    ON sd.id = pa.id
     FULL OUTER JOIN flagger_data fd
     ON fd.id = pa.id
     FULL OUTER JOIN poster_data pd
     ON pd.id = pa.id
-    WHERE pa.post_action_type_id = ANY(ARRAY#{PostActionType.flag_types_without_custom.values})
+    WHERE pa.post_action_type_id IN (#{flag_types_list})
     AND pa.created_at >= '#{report.start_date}'
     AND pa.created_at <= '#{report.end_date}'
     SQL
@@ -882,5 +894,9 @@ class Report
 
       report.data << revision
     end
+  end
+
+  def self.flag_types_list
+    PostActionType.flag_types_without_custom.values.join(',')
   end
 end
