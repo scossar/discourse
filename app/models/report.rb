@@ -872,26 +872,25 @@ class Report
     ON u.id = pr.user_id
     WHERE pr.created_at >= '#{report.start_date}'
     AND pr.created_at <= '#{report.end_date}'
+    ORDER BY pr.created_at DESC
+    LIMIT 20
     )
-    SELECT
-    pr.editor_id,
+    SELECT pr.editor_id,
+    pr.editor_username,
     p.user_id AS author_id,
+    u.username AS author_username,
     pr.revision_version,
     p.version AS post_version,
     pr.post_id,
     p.topic_id,
     p.post_number,
-    p.edit_reason,
-    u.username AS editor_username,
-    pr.created_at,
-    u.username AS author_username
+    p.edit_reason,    
+    pr.created_at
     FROM period_revisions pr
     JOIN posts p
     ON p.id = pr.post_id
     JOIN users u
     ON u.id = p.user_id
-    ORDER BY pr.created_at DESC
-    LIMIT 20
     SQL
 
     DB.query(sql).each do |r|
