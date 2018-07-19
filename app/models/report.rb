@@ -654,30 +654,32 @@ class Report
     SQL
 
     flag_count_query = <<~SQL
-    WITH agreed_flags AS (
+    WITH period_actions AS (
+    SELECT agreed_by_id,
+    disagreed_by_id
+    FROM post_actions
+    WHERE post_action_type_id IN (#{PostActionType.flag_types_without_custom.values.join(',')})
+    AND created_at >= '#{report.start_date}'
+    AND created_at <= '#{report.end_date}'
+    ),
+    agreed_flags AS (
     SELECT pa.agreed_by_id AS user_id,
     COUNT(*) AS flag_count
-    FROM post_actions pa
+    FROM period_actions pa
     JOIN users u
     ON u.id = pa.agreed_by_id
     WHERE u.moderator = 'true'
     AND u.id > 0
-    AND pa.post_action_type_id IN (#{PostActionType.flag_types_without_custom.values.join(',')})
-    AND pa.created_at >= '#{report.start_date}'
-    AND pa.created_at <= '#{report.end_date}'
     GROUP BY agreed_by_id
     ),
     disagreed_flags AS (
     SELECT pa.disagreed_by_id AS user_id,
     COUNT(*) AS flag_count
-    FROM post_actions pa
+    FROM period_actions pa
     JOIN users u
     ON u.id = pa.disagreed_by_id
     WHERE u.moderator = 'true'
     AND u.id > 0
-    AND pa.post_action_type_id IN (#{PostActionType.flag_types_without_custom.values.join(',')})
-    AND pa.created_at >= '#{report.start_date}'
-    AND pa.created_at <= '#{report.end_date}'
     GROUP BY disagreed_by_id
     )
     SELECT
