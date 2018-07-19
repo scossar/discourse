@@ -632,17 +632,13 @@ class Report
     report.data = []
     mod_data = {}
 
-    User.real.where(moderator: true).pluck(:id, :username).each do |u|
-      mod_data[u[0]] = {
-        user_id: u[0],
-        username: u[1],
-        user_url: "/admin/users/#{u[0]}/#{u[1]}"
+    User.real.where(moderator: true).find_each do |u|
+      mod_data[u.id] = {
+        user_id: u.id,
+        username: u.username,
+        user_url: "/admin/users/#{u.id}/#{u.username}"
       }
     end
-
-    mod_ids = mod_data.keys
-
-    return if mod_ids.empty?
 
     time_read_query = <<~SQL
     SELECT SUM(uv.time_read) AS time_read,
@@ -719,19 +715,19 @@ class Report
     SQL
 
     DB.query(time_read_query).each do |row|
-      mod_data[row.user_id][:time_read] = row.time_read
+      mod_data[row.user_id][:time_read] = row.time_read if mod_data[row.user_id]
     end
 
     DB.query(flag_count_query).each do |row|
-      mod_data[row.user_id][:flag_count] = row.flag_count
+      mod_data[row.user_id][:flag_count] = row.flag_count if mod_data[row.user_id]
     end
 
     DB.query(topic_count_query).each do |row|
-      mod_data[row.user_id][:topic_count] = row.topic_count
+      mod_data[row.user_id][:topic_count] = row.topic_count if mod_data[row.user_id]
     end
 
     DB.query(post_count_query).each do |row|
-      mod_data[row.user_id][:post_count] = row.post_count
+      mod_data[row.user_id][:post_count] = row.post_count if mod_data[row.user_id]
     end
 
     report.data = mod_data.values
