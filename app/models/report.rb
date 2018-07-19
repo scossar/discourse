@@ -662,7 +662,7 @@ class Report
     ON u.id = pa.agreed_by_id
     WHERE u.moderator = 'true'
     AND u.id > 0
-    AND pa.post_action_type_id IN (#{flag_types_list})
+    AND pa.post_action_type_id IN (#{PostActionType.flag_types_without_custom.values.join(',')})
     AND pa.created_at >= '#{report.start_date}'
     AND pa.created_at <= '#{report.end_date}'
     GROUP BY agreed_by_id
@@ -675,7 +675,7 @@ class Report
     ON u.id = pa.disagreed_by_id
     WHERE u.moderator = 'true'
     AND u.id > 0
-    AND pa.post_action_type_id IN (#{flag_types_list})
+    AND pa.post_action_type_id IN (#{PostActionType.flag_types_without_custom.values.join(',')})
     AND pa.created_at >= '#{report.start_date}'
     AND pa.created_at <= '#{report.end_date}'
     GROUP BY disagreed_by_id
@@ -763,7 +763,7 @@ class Report
     user_id,
     COALESCE(disagreed_at, agreed_at, deferred_at) AS responded_at
     FROM post_actions
-    WHERE post_action_type_id IN (#{flag_types_list})
+    WHERE post_action_type_id IN (#{PostActionType.flag_types_without_custom.values.join(',')})
     AND created_at >= '#{report.start_date}'
     AND created_at <= '#{report.end_date}'
     ),
@@ -897,9 +897,5 @@ class Report
 
       report.data << revision
     end
-  end
-
-  def self.flag_types_list
-    PostActionType.flag_types_without_custom.values.join(',')
   end
 end
