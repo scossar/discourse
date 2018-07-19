@@ -749,44 +749,50 @@ class Report
     flag_types = PostActionType.flag_types_without_custom
 
     sql = <<~SQL
-    WITH poster_data AS (
+    WITH period_actions AS (
+    SELECT id,
+    post_action_type_id,
+    created_at,
+    agreed_at,
+    disagreed_at,
+    deferred_at,
+    agreed_by_id,
+    disagreed_by_id,
+    deferred_by_id,
+    post_id,
+    user_id,
+    COALESCE(disagreed_at, agreed_at, deferred_at) AS responded_at
+    FROM post_actions
+    WHERE post_action_type_id IN (#{flag_types_list})
+    AND created_at >= '#{report.start_date}'
+    AND created_at <= '#{report.end_date}'
+    ),
+    poster_data AS (
     SELECT pa.id,
     p.user_id AS poster_id,
     u.username AS poster_username
-    FROM post_actions pa
+    FROM period_actions pa
     JOIN posts p
     ON p.id = pa.post_id
     JOIN users u
     ON u.id = p.user_id
-    WHERE pa.post_action_type_id IN (#{flag_types_list})
-    AND pa.created_at >= '#{report.start_date}'
-    AND pa.created_at <= '#{report.end_date}'
     ),
     flagger_data AS (
-    SELECT
-    pa.id,
+    SELECT pa.id,
     u.id AS flagger_id,
     u.username AS flagger_username
-    FROM post_actions pa
+    FROM period_actions pa
     JOIN users u
     ON u.id = pa.user_id
-    WHERE pa.post_action_type_id IN (#{flag_types_list})
-    AND pa.created_at >= '#{report.start_date}'
-    AND pa.created_at <= '#{report.end_date}'
     ),
     staff_data AS (
-    SELECT
-    pa.id,
+    SELECT pa.id,
     u.id AS staff_id,
     u.username AS staff_username
-    FROM post_actions pa
+    FROM period_actions pa
     JOIN users u
     ON u.id = COALESCE(pa.agreed_by_id, pa.disagreed_by_id, pa.deferred_by_id)
-    WHERE pa.post_action_type_id IN (#{flag_types_list})
-    AND pa.created_at >= '#{report.start_date}'
-    AND pa.created_at <= '#{report.end_date}'
     )
-
     SELECT
     sd.staff_username,
     sd.staff_id,
@@ -803,16 +809,13 @@ class Report
     pa.disagreed_by_id,
     pa.deferred_by_id,
     COALESCE(pa.disagreed_at, pa.agreed_at, pa.deferred_at) AS responded_at
-    FROM post_actions pa
+    FROM period_actions pa
     FULL OUTER JOIN staff_data sd
     ON sd.id = pa.id
     FULL OUTER JOIN flagger_data fd
     ON fd.id = pa.id
     FULL OUTER JOIN poster_data pd
     ON pd.id = pa.id
-    WHERE pa.post_action_type_id IN (#{flag_types_list})
-    AND pa.created_at >= '#{report.start_date}'
-    AND pa.created_at <= '#{report.end_date}'
     SQL
 
     DB.query(sql).each do |row|
