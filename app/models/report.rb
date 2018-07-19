@@ -861,10 +861,22 @@ class Report
     report.data = []
 
     sql = <<~SQL
-    SELECT
-    pr.user_id AS editor_id,
-    p.user_id AS author_id,
+    WITH period_revisions AS (
+    SELECT pr.user_id AS editor_id,
     pr.number AS revision_version,
+    pr.created_at,
+    pr.post_id,
+    u.username AS editor_username
+    FROM post_revisions pr
+    JOIN users u
+    ON u.id = pr.user_id
+    WHERE pr.created_at >= '#{report.start_date}'
+    AND pr.created_at <= '#{report.end_date}'
+    )
+    SELECT
+    pr.editor_id,
+    p.user_id AS author_id,
+    pr.revision_version,
     p.version AS post_version,
     pr.post_id,
     p.topic_id,
@@ -872,14 +884,12 @@ class Report
     p.edit_reason,
     u.username AS editor_username,
     pr.created_at,
-    (SELECT u.username FROM users u WHERE u.id = p.user_id) AS author_username
-    FROM post_revisions pr
+    u.username AS author_username
+    FROM period_revisions pr
     JOIN posts p
-      ON p.id = pr.post_id
+    ON p.id = pr.post_id
     JOIN users u
-      ON u.id = pr.user_id
-      WHERE pr.created_at >= '#{report.start_date}'
-      AND pr.created_at <= '#{report.end_date}'
+    ON u.id = p.user_id
     ORDER BY pr.created_at DESC
     LIMIT 20
     SQL
